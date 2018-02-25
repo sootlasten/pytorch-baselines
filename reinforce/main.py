@@ -14,6 +14,7 @@ from torch.autograd import Variable
 from torch.distributions import Categorical
 
 
+
 def preprocess(frame):
     frame = frame[35:195, :]  # remove uninformative parts of the frame
     frame = rgb2gray(frame) * 255
@@ -43,7 +44,7 @@ class Policy(nn.Module):
         return F.softmax(scores, dim=1)
 
 
-def train(total_frames=100000):
+def train():
     gamma = 0.99
 
     running_reward = None
@@ -53,7 +54,7 @@ def train(total_frames=100000):
     obs = env.reset()
 
     policy = Policy()
-    # policy.cuda()
+    policy.cuda()
     optimizer = optim.RMSprop(policy.parameters(), lr=2.5e-4)
     
     rewards = []
@@ -62,6 +63,7 @@ def train(total_frames=100000):
     
     nb_episode = 0
     frames = Variable(torch.zeros((1, 4, 84, 84)))  # used to hold 4 consecutive frames
+    start_time = time.time()
     while True:  # main training loop
         frames = frames.data.cpu().numpy()
         obs = preprocess(obs)
@@ -69,9 +71,10 @@ def train(total_frames=100000):
         frames[0, 0] = obs
         frames = torch.from_numpy(frames)
         frames = Variable(frames)
-        # frames = frames.cuda()
+        frames = frames.cuda()
         
         action_probs = policy(frames)
+        torch.cuda.synchronize
         action_dist = Categorical(action_probs)
         action = action_dist.sample()
     
@@ -83,6 +86,9 @@ def train(total_frames=100000):
         allprobs.append(action_probs)
         
         if done:
+            end_time = time.time()
+            print("Game finished in {:.2f} s".format(end_time - start_time))
+
             # discount rewards
             nb_rewards = len(rewards)
             discounted_rewards = np.zeros(nb_rewards)
@@ -98,12 +104,16 @@ def train(total_frames=100000):
             for logp, r in zip(logprobs, norm_rewards):
                 loss.append(-logp*r)
             allprobs = torch.cat(allprobs)
-            # entropy = -torch.sum(allprobs*torch.log(allprobs), dim=1)
+            entropy = -torch.sum(allprobs*torch.log(allprobs), dim=1)
             loss = torch.cat(loss).sum() # + 0.01*entropy.sum()
         
             # param update 
+            backstart = time.time()
             optimizer.zero_grad()
             loss.backward()
+            torch.cuda.synchronize
+            backend = time.time()
+            print("Backward pass took: {:.2f} s".format(backend - backstart))
             optimizer.step()
             
             # 0-out buffers
@@ -113,15 +123,17 @@ def train(total_frames=100000):
 
             # log
             # running_reward = reward if not running_reward else 0.01*reward_sum + 0.99*running_reward
-            print(nb_episode, reward_sum)
+            # print(nb_episode, reward_sum)
             nb_episode += 1
             reward_sum = 0
 
             # start new episode
             obs = env.reset()
+            start_time = time.time()
+
         
-        if not nb_episode % 10:
-            torch.save(policy.state_dict(), '/home/stensootla/projects/pytorch-baselines/reinforce/pong.pt')
+        # if not nb_episode % 10:
+        #     torch.save(policy.state_dict(), '/home/stensootla/projects/pytorch-baselines/reinforce/pong.pt')
 
 
 def test():
