@@ -1,2 +1,3 @@
 *.pt
 *.swp
+__pycache__/

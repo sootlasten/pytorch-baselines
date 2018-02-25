@@ -85,7 +85,7 @@ def train(eta, gamma, beta, envname, no_cuda, seed):
 
             epi += 1; reward_sum = 0; ep_start = time.time()
     
-        if not epi % 10:
+        if not epi % 200:
             torch.save(policy.state_dict(), '/home/stensootla/projects/pytorch-baselines/reinforce/pong.pt')
 
 
