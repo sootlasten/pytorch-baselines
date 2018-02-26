@@ -3,7 +3,6 @@ Trains an agent in a ATARI episodic environment. Rewards are accumulated
 thorughout the entire episode, and updates are made after the end of the episode.
 """
 
-
 import time
 import argparse
 import numpy as np
@@ -88,7 +87,7 @@ def train(args):
             obs = env.reset()
             
             total_time = time.time() - ep_start
-            print("Episode {} took {:.2f} s ({}). Reward: {:.2f}".format(epi, total_time, ts, reward_sum))
+            print("Episode {} took {:.2f} s. Frames: {}. Reward: {:.2f}".format(epi, total_time, ts, reward_sum))
 
             epi += 1; reward_sum = 0; ep_start = time.time()
     
