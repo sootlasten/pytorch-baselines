@@ -1,3 +1,9 @@
+"""
+Trains an agent in a ATARI episodic environment. Rewards are accumulated 
+thorughout the entire episode, and updates are made after the end of the episode.
+"""
+
+
 import time
 import argparse
 import numpy as np
@@ -27,9 +33,6 @@ def _discount_rewards(rewards):
 
 
 def train(args):
-    """Trains an agent in a ATARI episodic environment. Rewards are accumulated 
-       thorughout the entire episode, and updates are made after the end of 
-       the episode."""
     env = gym.make(args.env)
     obs = env.reset()
 
