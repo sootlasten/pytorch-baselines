@@ -16,10 +16,10 @@ from utils import preprocess_pong
 
 
 def test():
-    env = gym.make('Pong-v0')
+    env = gym.make('PongDeterministic-v0')
     policy = CnnPolicy(env.action_space.n)
 
-    policy.load_state_dict(torch.load('policy.ckpt'))
+    # policy.load_state_dict(torch.load('policy.ckpt'))
     obs = env.reset()
     done = False
     nb_frames = 0
