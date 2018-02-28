@@ -8,7 +8,7 @@ import time
 def preprocess_atari(frame):
     """Preprocess the input DQN-style."""
     frame = rgb2gray(frame) * 255
-    frame = resize(frame, (84, 84))
+    frame = resize(frame, (80, 80))
     return frame.astype(np.float32)
 
 

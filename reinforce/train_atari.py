@@ -1,10 +1,7 @@
-"""
-Trains an agent in a ATARI episodic environment. Rewards are accumulated 
-thorughout the entire episode, and updates are made after the end of the episode.
-"""
 import time
 import argparse
 import numpy as np
+import pickle
 
 import gym
 import torch
@@ -35,7 +32,7 @@ def train(args):
 
     policy = CnnPolicy(env.action_space.n)
     if not args.no_cuda: policy.cuda()
-    optimizer = optim.RMSprop(policy.parameters(), lr=args.eta)
+    optimizer = optim.Adam(policy.parameters(), lr=args.eta)
     
     frames = Variable(torch.zeros((1, 4, 80, 80)))
     if not args.no_cuda: frames = frames.cuda()
@@ -44,8 +41,11 @@ def train(args):
     rewards, logprobs, aprobs = [], [], []
     reward_sum = 0
     epi = 0; ep_start = time.time()
-
-    for ts in range(args.nb_timesteps):
+        
+    running_reward = args.init_runreward
+    running_rewards = []
+    saved_epi = epi
+    for ts in range(1, args.nb_steps+1):
         obs = prepro(obs)
         obs = np.expand_dims(np.expand_dims(obs, 0), 0)
         obs = Variable(torch.from_numpy(obs))
@@ -65,8 +65,8 @@ def train(args):
         rewards.append(reward)
         logprobs.append(action_dist.log_prob(action))
         aprobs.append(action_probs)
-        
-        if done:
+    
+        if not ts % args.update_freq:
             disc_rewards = _discount_rewards(rewards)
             norm_rewards = (disc_rewards - np.mean(disc_rewards)) / np.std(disc_rewards)
             
@@ -79,28 +79,33 @@ def train(args):
             loss.backward()
             optimizer.step()
             
-            # zero-out buffers and restart game
+            # zero-out buffers
             frames = Variable(torch.zeros((1, 4, 80, 80)))
             if not args.no_cuda: frames = frames.cuda()
             rewards, logprobs, aprobs = [], [], []
-            obs = env.reset()
             
+        if done:
             total_time = time.time() - ep_start
-            print("Episode {} took {:.2f} s. Frames: {}. Reward: {:.2f}".format(epi, total_time, ts, reward_sum))
+            running_reward = reward_sum if not running_reward else running_reward*0.99 + reward_sum*0.01
+            print("Episode {} took {:.2f} s. Steps: {}. Reward: {:.2f}. Running: {:.2f}".format(epi, total_time, ts, reward_sum, running_reward))
 
             epi += 1; reward_sum = 0; ep_start = time.time()
+            obs = env.reset()
     
-        if not epi % args.save_freq:
+        if not epi % args.save_freq and saved_epi < epi:
+            running_rewards.append(running_reward)
+            pickle.dump(running_rewards, args.rewards_path)
             torch.save(policy.state_dict(), args.ckpt_path)
+            saved_epi = epi
 
 
 def parse():
     parser = argparse.ArgumentParser(description='train reinforce on an episodic atari env')
-    parser.add_argument('--eta', type=float, default=2.5e-4, metavar='L',
-                        help='learning rate for RMSProp (default: 2.5e-4)')
+    parser.add_argument('--eta', type=float, default=2.5e-5, metavar='L',
+                        help='learning rate for Adam (default: 2e-4)')
     parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                         help='discount factor (default: 0.99)')
-    parser.add_argument('--beta', type=float, default=0.01, metavar='G',
+    parser.add_argument('--beta', type=float, default=0.01, metavar='B',
                         help='controls the strength of the entropy regularization' +
                         'term (default: 0.01)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -108,13 +113,19 @@ def parse():
     parser.add_argument('--seed', type=int, default=543, metavar='N',
                         help='random seed (default: 543)')
     parser.add_argument('--env', type=str, default='PongDeterministic-v0', metavar='envname',
-                        help='the environment to train the model on (default: Pong-v0)')
-    parser.add_argument('--nb-timesteps', type=int, default=int(2e8), metavar='ts',
-                        help='number of timesteps the agent is trained')
+                        help='the environment to train the model on (default: PongDeterministic-v0)')
+    parser.add_argument('--nb-steps', type=int, default=int(2e8), metavar='T',
+                        help='number of timesteps the agent is trained'),
+    parser.add_argument('--update-freq', type=int, default=int(1e3), metavar='U',
+                        help='update the net params after every that number of steps')
+    parser.add_argument('--save-freq', type=int, default=200, metavar='F',
+                        help='save policy and running rewards after that many episodes')
     parser.add_argument('--ckpt-path', type=str, default=os.path.join(os.getcwd(), 'policy.ckpt'),
                         metavar='path', help='full path of the model checkpoint file')
-    parser.add_argument('--save-freq', type=int, default=200, metavar='F',
-                        help='save policy params after every that many episodes')
+    parser.add_argument('--rewards-path', type=str, default=os.path.join(os.getcwd(), 'rewards.ckpt'),
+                        metavar='path', help='full path of the pickled rewards gotten from evaluation')
+    parser.add_argument('--init-runreward', type=int, default=None, metavar='R',
+                        help='initial running reward for loggig')
     return parser.parse_args()
 
 

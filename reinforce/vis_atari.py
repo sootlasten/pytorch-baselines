@@ -33,7 +33,7 @@ def test():
         frames = torch.from_numpy(frames)
         frames = Variable(frames)
 
-        time.sleep(0.008)
+        # time.sleep(0.008)
         # env.render()
 
         action_probs = policy(frames)
