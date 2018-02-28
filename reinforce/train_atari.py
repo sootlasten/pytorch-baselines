@@ -68,11 +68,13 @@ def train(args):
     
         if not ts % args.update_freq:
             disc_rewards = _discount_rewards(rewards)
-            norm_rewards = (disc_rewards - np.mean(disc_rewards)) / np.std(disc_rewards)
+        
+            if np.any(disc_rewards):
+                disc_rewards = (disc_rewards - np.mean(disc_rewards)) / np.std(disc_rewards)
             
             aprobs = torch.cat(aprobs).clamp(1e-8)
             entropies = -torch.sum(aprobs*torch.log(aprobs), dim=1)
-            loss = (logprobs*-norm_rewards).sum() + args.beta*entropies.sum()
+            loss = (logprobs*-disc_rewards).sum() + args.beta*entropies.sum()
         
             # param update 
             optimizer.zero_grad()
