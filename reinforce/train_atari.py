@@ -74,7 +74,9 @@ def train(args):
             
             aprobs = torch.cat(aprobs).clamp(1e-8)
             entropies = -torch.sum(aprobs*torch.log(aprobs), dim=1)
-            loss = (logprobs*-disc_rewards).sum() + args.beta*entropies.sum()
+        
+            t1 = torch.cat(logprobs)*-Variable(torch.Tensor(disc_rewards)).cuda()
+            loss = t1.sum() + args.beta*entropies.sum()
         
             # param update 
             optimizer.zero_grad()
