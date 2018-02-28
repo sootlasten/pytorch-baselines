@@ -95,8 +95,12 @@ def train(args):
             obs = env.reset()
     
         if not epi % args.save_freq and saved_epi < epi:
+            print("Saving...")
             running_rewards.append(running_reward)
-            pickle.dump(running_rewards, args.rewards_path)
+            
+            with open(args.rewards_path, 'wb') as f:
+                pickle.dump(running_rewards, f)
+
             torch.save(policy.state_dict(), args.ckpt_path)
             saved_epi = epi
 
