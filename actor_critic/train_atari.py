@@ -38,10 +38,10 @@ def train(args):
     if not args.no_cuda: frames = frames.cuda()
     prepro = preprocess_pong if 'Pong' in args.env else preprocess_atari
 
-    rewards, logprobs, aprobs = [], [], []
+    rewards, logprobs, aprobs, state_values = [], [], [], []
     reward_sum = 0
     epi = 0; ep_start = time.time()
-
+        
     running_reward = args.init_runreward
     running_rewards = []
     saved_epi = epi
@@ -54,7 +54,7 @@ def train(args):
         start_ts = checkpoint['step']
         epi = checkpoint['episode']
         running_reward = checkpoint['running_reward']
-        
+
     for ts in range(start_ts, args.nb_steps+1):
         obs = prepro(obs)
         obs = np.expand_dims(np.expand_dims(obs, 0), 0)
@@ -65,7 +65,7 @@ def train(args):
         frames = frames[:, :-1, :, :]
         frames = torch.cat((obs, frames), 1)
 
-        action_probs = policy(frames)
+        action_probs, state_value = policy(frames)
         action_dist = Categorical(action_probs)
         action = action_dist.sample()
     
@@ -75,18 +75,21 @@ def train(args):
         rewards.append(reward)
         logprobs.append(action_dist.log_prob(action))
         aprobs.append(action_probs)
+        state_values.append(state_value)
     
         if not ts % args.update_freq:
             disc_rewards = _discount_rewards(rewards)
-        
             if np.any(disc_rewards):
                 disc_rewards = (disc_rewards - np.mean(disc_rewards)) / np.std(disc_rewards)
+            disc_rewards = Variable(torch.Tensor(disc_rewards)).cuda()
             
             aprobs = torch.cat(aprobs).clamp(1e-8)
+            state_values = torch.cat(state_values).squeeze()
             entropies = -torch.sum(aprobs*torch.log(aprobs), dim=1)
         
-            t1 = torch.cat(logprobs)*-Variable(torch.Tensor(disc_rewards)).cuda()
-            loss = t1.sum() + args.beta*entropies.sum()
+            actor_loss = -torch.cat(logprobs)*(disc_rewards - state_values)
+            critic_loss = torch.pow(disc_rewards - state_values, 2)
+            loss = actor_loss.sum() + critic_loss.sum() + args.beta*entropies.sum()
         
             # param update 
             optimizer.zero_grad()
@@ -96,7 +99,7 @@ def train(args):
             # zero-out buffers
             frames = Variable(torch.zeros((1, 4, 80, 80)))
             if not args.no_cuda: frames = frames.cuda()
-            rewards, logprobs, aprobs = [], [], []
+            rewards, logprobs, aprobs, state_values = [], [], [], []
             
         if done:
             total_time = time.time() - ep_start
@@ -114,7 +117,7 @@ def train(args):
             with open(args.rewards_path, 'wb') as f:
                 pickle.dump(running_rewards, f)
 
-            # save checkpoint 
+            # save checkpoint
             model_state = {'state_dict': policy.state_dict(), 
                            'optimizer': optimizer.state_dict(),
                            'step': ts,
@@ -126,11 +129,11 @@ def train(args):
 
 
 def parse():
-    parser = argparse.ArgumentParser(description='train reinforce on an episodic atari env')
+    parser = argparse.ArgumentParser(description='train actor-critic on atari env')
     parser.add_argument('--resume-ckpt', type=str, default=None, metavar='path',
                         help='path the the checkpoint with which to resume training')
-    parser.add_argument('--eta', type=float, default=2.5e-5, metavar='L',
-                        help='learning rate for Adam (default: 2e-4)')
+    parser.add_argument('--eta', type=float, default=2.5e-3, metavar='L',
+                        help='learning rate for Adam (default: 2e-3)')
     parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                         help='discount factor (default: 0.99)')
     parser.add_argument('--beta', type=float, default=0.01, metavar='B',
