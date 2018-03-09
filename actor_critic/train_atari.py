@@ -44,7 +44,8 @@ def train(args):
         
     running_reward = args.init_runreward
     running_rewards = []
-    saved_epi = epi
+    saved_reward_epi = epi
+    saved_ckpt_epi = epi
     start_ts = 1
 
     if args.resume_ckpt:
@@ -109,23 +110,20 @@ def train(args):
             epi += 1; reward_sum = 0; ep_start = time.time()
             obs = env.reset()
     
-        if not epi % args.save_freq and saved_epi < epi:
-            print("Saving...")
-            running_rewards.append(running_reward)
-            
-            # save rewards
-            with open(args.rewards_path, 'wb') as f:
-                pickle.dump(running_rewards, f)
-
-            # save checkpoint
+        if not epi % args.save_ckpt_freq and saved_ckpt_epi < epi:
             model_state = {'state_dict': policy.state_dict(), 
                            'optimizer': optimizer.state_dict(),
                            'step': ts,
                            'episode': epi,
                            'running_reward': running_reward}
             torch.save(model_state, args.ckpt_path)
-
-            saved_epi = epi
+            saved_ckpt_epi = epi
+        
+        if not epi % args.save_reward_freq and saved_reward_epi < epi:
+            running_rewards.append(running_reward)
+            with open(args.rewards_path, 'wb') as f:
+                pickle.dump(running_rewards, f)
+            saved_reward_epi = epi
 
 
 def parse():
@@ -149,8 +147,10 @@ def parse():
                         help='number of timesteps the agent is trained'),
     parser.add_argument('--update-freq', type=int, default=int(1e3), metavar='U',
                         help='update the net params after every that number of steps')
-    parser.add_argument('--save-freq', type=int, default=200, metavar='F',
-                        help='save policy and running rewards after that many episodes')
+    parser.add_argument('--save-reward-freq', type=int, default=1, metavar='RF',
+                        help='save running rewards after every that many episodes')
+    parser.add_argument('--save-ckpt-freq', type=int, default=100, metavar='CF',
+                        help='save model checkpoint after every that many episodes')
     parser.add_argument('--ckpt-path', type=str, default=os.path.join(os.getcwd(), 'policy.ckpt'),
                         metavar='path', help='full path of the model checkpoint file')
     parser.add_argument('--rewards-path', type=str, default=os.path.join(os.getcwd(), 'rewards.pickle'),

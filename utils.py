@@ -1,4 +1,6 @@
+import pickle
 import numpy as np
+import matplotlib.pyplot as plt
 from skimage.color import rgb2gray
 from skimage.transform import resize
 
@@ -19,4 +21,18 @@ def preprocess_pong(frame):
   frame[frame == 109] = 0 # erase background (background type 2)
   frame[frame != 0] = 1 # everything else (paddles, ball) just set to 1
   return frame.astype(np.float32)
+    
+
+def vis_rewards(filepath):
+    with open(filepath, 'rb') as f:
+        rewards = pickle.load(f)
+    plt.ylabel('Reward')
+    plt.plot(rewards)
+    plt.show()
+
+
+if __name__ == '__main__':
+    vis_rewards('/home/stensootla/projects/pytorch-baselines/actor_critic/experiments/rewards.pickle')
+    pass
+    
     
