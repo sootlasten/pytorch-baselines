@@ -49,17 +49,21 @@ def train(args):
     frames = Variable(torch.zeros((1, 4, 80, 80)))
     if not args.no_cuda: frames = frames.cuda()
     prepro = preprocess_pong if 'Pong' in args.env else preprocess_atari
-
-    rewards, logprobs, aprobs, state_values = [], [], [], []
+ 
+    # arrays for holding history and statistics
+    # frames_hist 
+    # frames_hist = torch.zeros((args.update_freq, 4) + prepro(obs).shape)
+    frames_hist, rewards, logprobs, action_hist = [], [], [], []
+    
+    # stuff for monitoring and logging progress
     reward_sum = 0
     epi = 0; ep_start = time.time()
-        
     running_reward = args.init_runreward
     running_rewards = []
     saved_reward_epi = epi
     saved_ckpt_epi = epi
     start_ts = 1
-
+    
     if args.resume_ckpt:
         checkpoint = torch.load(args.resume_ckpt)
         policy.load_state_dict(checkpoint['state_dict'])
@@ -71,45 +75,67 @@ def train(args):
     for ts in range(start_ts, args.nb_steps+1):
         frames = _build_frames(prepro, obs, frames, args.no_cuda)
         
-        action_probs, state_value = policy(frames)
+        action_probs, _ = policy(frames)
         action_dist = Categorical(action_probs)
         action = action_dist.sample()
     
         obs, reward, done, _ = env.step(action.data[0])
         reward_sum += reward
     
+        # hist_idx = ts % args.update_freq - 1
+        frames_hist.append(frames)
+        action_hist.append(action)
         rewards.append(reward)
         logprobs.append(action_dist.log_prob(action))
-        aprobs.append(action_probs)
-        state_values.append(state_value)
     
         if done or not ts % args.update_freq:
             # feed last state through the network to get policy values
             final_state = _build_frames(prepro, obs, frames, args.no_cuda)
             _, final_sval = policy(final_state)
-
+            
             disc_rewards = np.array(rewards)
             disc_rewards = (disc_rewards - np.mean(disc_rewards)) / (np.std(disc_rewards) + 1e-10)
             disc_rewards = _discount_rewards(disc_rewards, 0 if done else final_sval.data)
             disc_rewards = Variable(torch.Tensor(disc_rewards)).cuda()
+
+            pi_old = torch.cat(logprobs).exp().detach()
+        
+            for _ in range(args.nb_epochs):
+                nb_batches = int(np.ceil(len(rewards) / args.batch_size))
+                for i in range(nb_batches):
+                    sidx = i*args.batch_size
+                    batch_frames = torch.cat(frames_hist[sidx: sidx+args.batch_size]).cuda()
+                    aprobs, statevals = policy(batch_frames)
+                    aprobs = aprobs.clamp(1e-8)
+                    
+                    action_dist = Categorical(aprobs)
+                    batch_actions = torch.cat(action_hist[sidx: sidx+args.batch_size])
+                    pi = action_dist.log_prob(batch_actions).exp()
+  
+                    # clipped actor loss
+                    ratio = pi / pi_old[sidx: sidx+args.batch_size]
+                    advs = disc_rewards[sidx: sidx+args.batch_size] - statevals.squeeze()
             
-            aprobs = torch.cat(aprobs).clamp(1e-8)
-            state_values = torch.cat(state_values).squeeze()
-            entropies = -torch.sum(aprobs*torch.log(aprobs), dim=1)
-        
-            actor_loss = -torch.cat(logprobs)*(disc_rewards - state_values)
-            critic_loss = torch.pow(disc_rewards - state_values, 2)
-            loss = actor_loss.sum() + critic_loss.sum() - args.beta*entropies.sum()
-        
-            # param update 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                    lhs = ratio*advs 
+                    rhs = torch.clamp(pi, 1-args.eps, 1+args.eps)*advs
+                    loss_clip = torch.min(lhs, rhs).sum()
+                
+                    # critic loss
+                    loss_critic = torch.pow(advs, 2).sum()
+
+                    # full loss
+                    entropies = -torch.sum(aprobs*torch.log(aprobs), dim=1)
+                    loss = -loss_clip + args.c1*loss_critic - args.c2*entropies.sum()
+                            
+                    # param update 
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
             
             # zero-out buffers
             frames = Variable(torch.zeros((1, 4, 80, 80)))
             if not args.no_cuda: frames = frames.cuda()
-            rewards, logprobs, aprobs, state_values = [], [], [], []
+            frames_hist, action_hist, rewards, logprobs = [], [], [], []
             
         if done:
             total_time = time.time() - ep_start
@@ -146,6 +172,16 @@ def parse():
     parser.add_argument('--beta', type=float, default=0.01, metavar='B',
                         help='controls the strength of the entropy regularization' +
                         'term (default: 0.01)')
+    parser.add_argument('--eps', type=float, default=0.2, metavar='E',
+                        help='clipping parameter')
+    parser.add_argument('--batch_size', type=int, default=32, metavar='B',
+                        help='minibatch size')
+    parser.add_argument('--nb_epochs', type=int, default=3, metavar='E',
+                        help='number of epochs')
+    parser.add_argument('--c1', type=float, default=1, metavar='C1',
+                        help='critic loss coeff')
+    parser.add_argument('--c2', type=float, default=1, metavar='C2',
+                        help='entropy coeff')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=543, metavar='N',
