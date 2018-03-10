@@ -32,7 +32,7 @@ def vis_rewards(filepath):
 
 
 if __name__ == '__main__':
-    vis_rewards('/home/stensootla/projects/pytorch-baselines/actor_critic/experiments/rewards.pickle')
+    vis_rewards('/home/stensootla/projects/pytorch-baselines/actor_critic/rewards.pickle')
     pass
     
     

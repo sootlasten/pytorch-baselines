@@ -88,9 +88,9 @@ def train(args):
             final_state = _build_frames(prepro, obs, frames, args.no_cuda)
             _, final_sval = policy(final_state)
 
-            disc_rewards = _discount_rewards(rewards, 0 if done else final_sval)
-            if np.any(disc_rewards):
-                disc_rewards = (disc_rewards - np.mean(disc_rewards)) / np.std(disc_rewards)
+            disc_rewards = np.array(rewards)
+            disc_rewards = (disc_rewards - np.mean(disc_rewards)) / (np.std(disc_rewards) + 1e-10)
+            disc_rewards = _discount_rewards(disc_rewards, 0 if done else final_sval.data)
             disc_rewards = Variable(torch.Tensor(disc_rewards)).cuda()
             
             aprobs = torch.cat(aprobs).clamp(1e-8)
@@ -105,7 +105,7 @@ def train(args):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            
             # zero-out buffers
             frames = Variable(torch.zeros((1, 4, 80, 80)))
             if not args.no_cuda: frames = frames.cuda()
@@ -139,8 +139,8 @@ def parse():
     parser = argparse.ArgumentParser(description='train actor-critic on atari env')
     parser.add_argument('--resume-ckpt', type=str, default=None, metavar='path',
                         help='path the the checkpoint with which to resume training')
-    parser.add_argument('--eta', type=float, default=2.5e-3, metavar='L',
-                        help='learning rate for Adam (default: 2e-3)')
+    parser.add_argument('--eta', type=float, default=2.5e-4, metavar='L',
+                        help='learning rate for Adam (default: 2e-4)')
     parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                         help='discount factor (default: 0.99)')
     parser.add_argument('--beta', type=float, default=0.01, metavar='B',
@@ -154,7 +154,7 @@ def parse():
                         help='the environment to train the model on (default: PongDeterministic-v0)')
     parser.add_argument('--nb-steps', type=int, default=int(2e8), metavar='T',
                         help='number of timesteps the agent is trained'),
-    parser.add_argument('--update-freq', type=int, default=int(1e3), metavar='U',
+    parser.add_argument('--update-freq', type=int, default=128, metavar='U',
                         help='update the net params after every that number of steps')
     parser.add_argument('--save-reward-freq', type=int, default=1, metavar='RF',
                         help='save running rewards after every that many episodes')
