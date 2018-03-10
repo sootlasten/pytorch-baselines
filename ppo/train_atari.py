@@ -51,8 +51,6 @@ def train(args):
     prepro = preprocess_pong if 'Pong' in args.env else preprocess_atari
  
     # arrays for holding history and statistics
-    # frames_hist 
-    # frames_hist = torch.zeros((args.update_freq, 4) + prepro(obs).shape)
     frames_hist, rewards, logprobs, action_hist = [], [], [], []
     
     # stuff for monitoring and logging progress
@@ -107,9 +105,10 @@ def train(args):
 
                 # shuffle 
                 indices = torch.randperm(n).cuda()
-                pi_old = pi_old[indices]
-                action_hist = action_hist[indices]
                 frames_hist = frames_hist[indices, :, :, :]
+                disc_rewards = disc_rewards[indices]
+                action_hist = action_hist[indices]
+                pi_old = pi_old[indices]
             
                 nb_batches = int(np.ceil(n / args.batch_size))
                 for i in range(nb_batches):
@@ -127,8 +126,8 @@ def train(args):
                     ratio = pi / pi_old[sidx: sidx+args.batch_size]
                     advs = disc_rewards[sidx: sidx+args.batch_size] - statevals.squeeze()
             
-                    lhs = ratio*advs 
-                    rhs = torch.clamp(pi, 1-args.eps, 1+args.eps)*advs
+                    lhs = ratio*advs.detach() 
+                    rhs = torch.clamp(pi, 1-args.eps, 1+args.eps)*advs.detach()
                     loss_clip = torch.min(lhs, rhs).sum()
                 
                     # critic loss
@@ -183,7 +182,7 @@ def parse():
     parser.add_argument('--beta', type=float, default=0.01, metavar='B',
                         help='controls the strength of the entropy regularization' +
                         'term (default: 0.01)')
-    parser.add_argument('--eps', type=float, default=0.2, metavar='E',
+    parser.add_argument('--eps', type=float, default=0.1, metavar='E',
                         help='clipping parameter')
     parser.add_argument('--batch_size', type=int, default=32, metavar='B',
                         help='minibatch size')
@@ -191,8 +190,8 @@ def parse():
                         help='number of epochs')
     parser.add_argument('--c1', type=float, default=1, metavar='C1',
                         help='critic loss coeff')
-    parser.add_argument('--c2', type=float, default=1, metavar='C2',
-                        help='entropy coeff')
+    parser.add_argument('--c2', type=float, default=0.01, metavar='C2',
+                        help='entropy coeff (default: 0.01)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=543, metavar='N',

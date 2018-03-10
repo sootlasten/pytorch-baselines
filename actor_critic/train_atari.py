@@ -97,7 +97,7 @@ def train(args):
             state_values = torch.cat(state_values).squeeze()
             entropies = -torch.sum(aprobs*torch.log(aprobs), dim=1)
         
-            actor_loss = -torch.cat(logprobs)*(disc_rewards - state_values)
+            actor_loss = -torch.cat(logprobs)*(disc_rewards - state_values.detach())
             critic_loss = torch.pow(disc_rewards - state_values, 2)
             loss = actor_loss.sum() + critic_loss.sum() - args.beta*entropies.sum()
         
