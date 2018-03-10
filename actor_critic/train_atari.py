@@ -17,9 +17,21 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import preprocess_pong, preprocess_atari
 
 
-def _discount_rewards(rewards):
+def _build_frames(prepro_func, obs, frames, no_cuda):
+    obs = prepro_func(obs)
+    obs = np.expand_dims(np.expand_dims(obs, 0), 0)
+    obs = Variable(torch.from_numpy(obs))
+    if not no_cuda: obs = obs.cuda()
+    
+    # add current observation to structure that holds cosecutive frames
+    frames = frames[:, :-1, :, :]
+    frames = torch.cat((obs, frames), 1)
+    return frames
+
+
+def _discount_rewards(rewards, final_sval):
     disc_rewards = np.zeros(len(rewards))
-    running_add = 0
+    running_add = final_sval
     for i in np.arange(len(rewards)-1, -1, -1):
         running_add = rewards[i] + args.gamma*running_add
         disc_rewards[i] = running_add
@@ -57,15 +69,8 @@ def train(args):
         running_reward = checkpoint['running_reward']
 
     for ts in range(start_ts, args.nb_steps+1):
-        obs = prepro(obs)
-        obs = np.expand_dims(np.expand_dims(obs, 0), 0)
-        obs = Variable(torch.from_numpy(obs))
-        if not args.no_cuda: obs = obs.cuda()
+        frames = _build_frames(prepro, obs, frames, args.no_cuda)
         
-        # add current observation to structure that holds cosecutive frames
-        frames = frames[:, :-1, :, :]
-        frames = torch.cat((obs, frames), 1)
-
         action_probs, state_value = policy(frames)
         action_dist = Categorical(action_probs)
         action = action_dist.sample()
@@ -78,8 +83,12 @@ def train(args):
         aprobs.append(action_probs)
         state_values.append(state_value)
     
-        if not ts % args.update_freq:
-            disc_rewards = _discount_rewards(rewards)
+        if done or not ts % args.update_freq:
+            # feed last state through the network to get policy values
+            final_state = _build_frames(prepro, obs, frames, args.no_cuda)
+            _, final_sval = policy(final_state)
+
+            disc_rewards = _discount_rewards(rewards, 0 if done else final_sval)
             if np.any(disc_rewards):
                 disc_rewards = (disc_rewards - np.mean(disc_rewards)) / np.std(disc_rewards)
             disc_rewards = Variable(torch.Tensor(disc_rewards)).cuda()
@@ -96,7 +105,7 @@ def train(args):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
+
             # zero-out buffers
             frames = Variable(torch.zeros((1, 4, 80, 80)))
             if not args.no_cuda: frames = frames.cuda()
