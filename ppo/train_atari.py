@@ -127,7 +127,7 @@ def train(args):
                     advs = disc_rewards[sidx: sidx+args.batch_size] - statevals.squeeze()
             
                     lhs = ratio*advs.detach() 
-                    rhs = torch.clamp(pi, 1-args.eps, 1+args.eps)*advs.detach()
+                    rhs = torch.clamp(ratio, 1-args.eps, 1+args.eps)*advs.detach()
                     loss_clip = torch.min(lhs, rhs).sum()
                 
                     # critic loss
