@@ -98,18 +98,29 @@ def train(args):
             disc_rewards = _discount_rewards(disc_rewards, 0 if done else final_sval.data)
             disc_rewards = Variable(torch.Tensor(disc_rewards)).cuda()
 
+            frames_hist = torch.cat(frames_hist)
+            action_hist = torch.cat(action_hist)
             pi_old = torch.cat(logprobs).exp().detach()
         
             for _ in range(args.nb_epochs):
-                nb_batches = int(np.ceil(len(rewards) / args.batch_size))
+                n = len(rewards)
+
+                # shuffle 
+                indices = torch.randperm(n).cuda()
+                pi_old = pi_old[indices]
+                action_hist = action_hist[indices]
+                frames_hist = frames_hist[indices, :, :, :]
+            
+                nb_batches = int(np.ceil(n / args.batch_size))
                 for i in range(nb_batches):
                     sidx = i*args.batch_size
-                    batch_frames = torch.cat(frames_hist[sidx: sidx+args.batch_size]).cuda()
+
+                    batch_frames = frames_hist[sidx: sidx+args.batch_size]
                     aprobs, statevals = policy(batch_frames)
                     aprobs = aprobs.clamp(1e-8)
                     
                     action_dist = Categorical(aprobs)
-                    batch_actions = torch.cat(action_hist[sidx: sidx+args.batch_size])
+                    batch_actions = action_hist[sidx: sidx+args.batch_size]
                     pi = action_dist.log_prob(batch_actions).exp()
   
                     # clipped actor loss
