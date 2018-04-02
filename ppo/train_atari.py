@@ -80,7 +80,6 @@ def train(args):
         obs, reward, done, _ = env.step(action.data[0])
         reward_sum += reward
     
-        # hist_idx = ts % args.update_freq - 1
         frames_hist.append(frames)
         action_hist.append(action)
         rewards.append(reward)
