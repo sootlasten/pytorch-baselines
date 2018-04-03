@@ -97,21 +97,21 @@ def train(args):
             pi_orig = policy(frames_hist)
             aprobs_orig = torch.gather(pi_orig, 1, action_hist.view(-1, 1))
                     
-            orig_theta = policy.gather_flat_params()
+            orig_theta = policy.gather_flat_params().detach()
 
             # CG. Initial direction.
             # Gradient of linear term
-            is_obj = torch.sum((aprobs_orig.detach()/aprobs_orig)*advs)
+            is_obj = torch.sum((aprobs_orig/aprobs_orig.detach())*advs)
             is_obj.backward(retain_graph=True)
-            g = policy.gather_flat_grad()
+            g = policy.gather_flat_grad().detach()
             
             # gradient from quadratic term
-            kl = kl_div(pi_orig, pi_orig.detach())
+            kl = kl_div(pi_orig.detach(), pi_orig)
             policy.zero_grad()
             kl.backward(retain_graph=True, create_graph=True)
             g_kl = policy.gather_flat_grad()
             
-            z = torch.dot(g_kl, g.detach())
+            z = torch.dot(g_kl, orig_theta)
             policy.zero_grad()
             z.backward(retain_graph=True)
             Hx = policy.gather_flat_grad()
@@ -120,19 +120,18 @@ def train(args):
             # compute dHd
             z = torch.dot(g_kl, d.detach())
             policy.zero_grad()
-            z.backward()
+            z.backward(retain_graph=True)
             Hd = policy.gather_flat_grad()
             dHd = torch.dot(d, Hd)
             
-            for _ in range(args.nb_cgsteps):
-                
-                # take a step in the obtained direction by first performing line search to
+            for cg_iter in range(args.nb_cgsteps):
+                # Take a step in the obtained direction by first performing line search to
                 # find a reasonable step size
                 theta_old = policy.gather_flat_params()
                 beta = torch.sqrt((2*args.stepsize) / dHd)
                 i = 1
                 while True:
-                    theta = theta_old + beta*d
+                    theta = (theta_old + beta*d).detach()
                     policy.replace_params(theta)
                     pi = policy(frames_hist)
                     kl_indicator = 0 if kl_div(pi_orig, pi) <= args.stepsize else float("inf")
@@ -140,65 +139,47 @@ def train(args):
                     aprobs = torch.gather(pi, 1, action_hist.view(-1, 1))
                     cur_is_obj = torch.sum((aprobs/aprobs_orig)*advs)
 
-                    if cur_is_obj - kl_indicator > is_obj:
+                    if cur_is_obj - kl_indicator >= is_obj:
                         is_obj = cur_is_obj
                         break
                     else:
                         beta /= 2
                         i += 1
                 
-                print("Found step after {} iters".format(i))
+                print("CG iter {}/{}. Line search terminated after {} steps."
+                    .format(cg_iter, args.nb_cgsteps, i))
 
-                # find new conjugate direction
-                
-                # 1. \grad f(\theta)
-                # grad of linear term
-                policy.replace_params(orig_theta)
-                pi_orig = policy(frames_hist)
-                aprobs_orig = torch.gather(pi_orig, 1, action_hist.view(-1, 1))
-
-                policy.zero_grad()
-                torch.sum((aprobs.detach()/aprobs_orig)*advs).backward(retain_graph=True)
-                g = policy.gather_flat_grad()
-                
-                # grad of the quadratic term
-                kl = kl_div(pi_orig, pi.detach())
-                policy.zero_grad()
-                kl.backward(retain_graph=True, create_graph=True)
-                g_kl = policy.gather_flat_grad()
-                
-                z = torch.dot(g_kl, g.detach())
+                # Find new conjugate direction
+                # Get steepest descent direction
+                z = torch.dot(g_kl, theta)
                 policy.zero_grad()
                 z.backward(retain_graph=True)
                 Hx = policy.gather_flat_grad()
                 grad_f = g - Hx
                 
-                # 2. Gamma
-                # Hd
+                # Get gamma
                 z = torch.dot(g_kl, d.detach())
                 policy.zero_grad()
-                z.backward()
+                z.backward(retain_graph=True)
                 Hd = policy.gather_flat_grad()
-                
                 dHd = torch.dot(d, Hd)
                 gamma = torch.dot(grad_f, Hd) / dHd
 
                 # new direction
                 d = gamma*d - grad_f
-                policy.replace_params(theta)
 
             # zero-out buffers
             frames = Variable(torch.zeros((1, 4, 80, 80)))
             if not args.no_cuda: frames = frames.cuda()
-            frames_hist, action_hist, rewards, [], [], []
+            frames_hist, action_hist, rewards = [], [], []
             
-        # if done:
-        #     total_time = time.time() - ep_start
-        #     running_reward = reward_sum if not running_reward else running_reward*0.99 + reward_sum*0.01
-        #     print("Episode {} took {:.2f} s. Steps: {}. Reward: {:.2f}. Running: {:.2f}".format(epi, total_time, ts, reward_sum, running_reward))
+        if done:
+            total_time = time.time() - ep_start
+            running_reward = reward_sum if not running_reward else running_reward*0.99 + reward_sum*0.01
+            print("Episode {} took {:.2f} s. Steps: {}. Reward: {:.2f}. Running: {:.2f}".format(epi, total_time, ts, reward_sum, running_reward))
 
-        #     epi += 1; reward_sum = 0; ep_start = time.time()
-        #     obs = env.reset()
+            epi += 1; reward_sum = 0; ep_start = time.time()
+            obs = env.reset()
     
         # if not epi % args.save_ckpt_freq and saved_ckpt_epi < epi:
         #     model_state = {'state_dict': policy.state_dict(), 
@@ -251,7 +232,7 @@ def parse():
                         metavar='path', help='full path of the model checkpoint file')
     parser.add_argument('--rewards-path', type=str, default=os.path.join(os.getcwd(), 'rewards.pickle'),
                         metavar='path', help='full path of the pickled rewards gotten from evaluation')
-    parser.add_argument('--init-runreward', type=int, default=None, metavar='R',
+    parser.add_argument('--init-runreward', type=int, default=-21, metavar='R',
                         help='initial running reward for loggig')
     return parser.parse_args()
 
