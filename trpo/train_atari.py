@@ -204,8 +204,8 @@ def parse():
     parser.add_argument('--beta', type=float, default=0.01, metavar='B',
                         help='controls the strength of the entropy regularization' +
                         'term (default: 0.01)')
-    parser.add_argument('--eps', type=float, default=0.1, metavar='E',
-                        help='clipping parameter')
+    parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
+                        help='discount factor (default: 0.99)')
     parser.add_argument('--nb-cgsteps', type=int, default=10, metavar='CG',
                         help='number of conjugate gradient steps to take')
     parser.add_argument('--stepsize', type=float, default=1e-2, metavar='KL',
