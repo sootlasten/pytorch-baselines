@@ -79,7 +79,6 @@ def train(args):
     
         if not ts % args.update_freq:
             disc_rewards = _discount_rewards(rewards)
-        
             if np.any(disc_rewards):
                 disc_rewards = (disc_rewards - np.mean(disc_rewards)) / np.std(disc_rewards)
             
