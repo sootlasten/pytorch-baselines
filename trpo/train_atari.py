@@ -201,10 +201,6 @@ def parse():
     parser = argparse.ArgumentParser(description='train actor-critic on atari env')
     parser.add_argument('--resume-ckpt', type=str, default=None, metavar='path',
                         help='path the the checkpoint with which to resume training')
-    parser.add_argument('--eta', type=float, default=2.5e-4, metavar='L',
-                        help='learning rate for Adam (default: 2e-4)')
-    parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
-                        help='discount factor (default: 0.99)')
     parser.add_argument('--beta', type=float, default=0.01, metavar='B',
                         help='controls the strength of the entropy regularization' +
                         'term (default: 0.01)')
