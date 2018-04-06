@@ -1,7 +1,5 @@
 # pytorch-baselines
 
-The implemented agents perform as follows on pong:
-
 ![]('pong-results.png')
 
 
