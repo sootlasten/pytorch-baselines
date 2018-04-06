@@ -127,7 +127,7 @@ def parse():
     parser.add_argument('--resume-ckpt', type=str, default=None, metavar='path',
                         help='path the the checkpoint with which to resume training')
     parser.add_argument('--eta', type=float, default=2.5e-5, metavar='L',
-                        help='learning rate for Adam (default: 2e-4)')
+                        help='learning rate for Adam (default: 2.5e-5)')
     parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
                         help='discount factor (default: 0.99)')
     parser.add_argument('--beta', type=float, default=0.01, metavar='B',
@@ -135,8 +135,8 @@ def parse():
                         'term (default: 0.01)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training')
-    parser.add_argument('--seed', type=int, default=543, metavar='N',
-                        help='random seed (default: 543)')
+    parser.add_argument('--seed', type=int, default=666, metavar='N',
+                        help='random seed (default: 666)')
     parser.add_argument('--env', type=str, default='PongDeterministic-v0', metavar='envname',
                         help='the environment to train the model on (default: PongDeterministic-v0)')
     parser.add_argument('--nb-steps', type=int, default=int(2e8), metavar='T',
