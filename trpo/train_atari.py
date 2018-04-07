@@ -56,6 +56,7 @@ class TRPO():
         Hv = torch.autograd.grad(grad_vec_prod, self.policy.parameters(), create_graph=True)
         return torch.cat([p.contiguous().view(-1) for p in Hv]) + args.cg_damp*v
 
+
     # def __conjugate_gradient(self, b):
     #     """Optimizer conjugate-gradient, Nocedal & Wright algorithm 5.2"""
     #     x = torch.zeros_like(b)
@@ -73,6 +74,7 @@ class TRPO():
     # 
     #     return x
     
+
     def __conjugate_gradient(self, b):
         """Optimizer conjugate-gradient, Nocedal & Wright algorithm 5.2"""
         """Code adapted from https://github.com/openai/baselines/blob/master/baselines/common/cg.py"""
@@ -197,20 +199,19 @@ class TRPO():
                 epi += 1; reward_sum = 0; ep_start = time.time()
                 obs = env.reset()
         
-            # if not epi % args.save_ckpt_freq and saved_ckpt_epi < epi:
-            #     model_state = {'state_dict': policy.state_dict(), 
-            #                    'optimizer': optimizer.state_dict(),
-            #                    'step': ts,
-            #                    'episode': epi,
-            #                    'running_reward': running_reward}
-            #     torch.save(model_state, args.ckpt_path)
-            #     saved_ckpt_epi = epi
-            # 
-            # if not epi % args.save_reward_freq and saved_reward_epi < epi:
-            #     running_rewards.append(running_reward)
-            #     with open(args.rewards_path, 'wb') as f:
-            #         pickle.dump(running_rewards, f)
-            #     saved_reward_epi = epi
+            if not epi % args.save_ckpt_freq and saved_ckpt_epi < epi:
+                model_state = {'state_dict': policy.state_dict(), 
+                               'step': ts,
+                               'episode': epi,
+                               'running_reward': running_reward}
+                torch.save(model_state, args.ckpt_path)
+                saved_ckpt_epi = epi
+             
+            if not epi % args.save_reward_freq and saved_reward_epi < epi:
+                running_rewards.append(running_reward)
+                with open(args.rewards_path, 'wb') as f:
+                    pickle.dump(running_rewards, f)
+                saved_reward_epi = epi
 
 
 def parse():
@@ -227,9 +228,8 @@ def parse():
     parser.add_argument('--ent-coeff', type=float, default=0.01, metavar='E',
                         help='controls the strength of the entropy regularization' +
                         'term (default: 0.01)')
-     parser.add_argument('--cg_damp', type=float, default=0.001, metavar='D',
-                        help='conjugate gradient Hessian damping (?) coefficient for conjugate gradient')
-                        'term (default: 0.01)')
+    parser.add_argument('--cg_damp', type=float, default=0.001, metavar='D',
+                        help='Hessian damping (?) coefficient for conjugate gradient (default: 0.001)')
     parser.add_argument('--stepsize', type=float, default=1e-3, metavar='KL',
                         help='the desired KL divergence')
     parser.add_argument('--no-cuda', action='store_true', default=False,
