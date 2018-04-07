@@ -200,7 +200,7 @@ class TRPO():
                 obs = env.reset()
         
             if not epi % args.save_ckpt_freq and saved_ckpt_epi < epi:
-                model_state = {'state_dict': policy.state_dict(), 
+                model_state = {'state_dict': self.policy.state_dict(), 
                                'step': ts,
                                'episode': epi,
                                'running_reward': running_reward}
