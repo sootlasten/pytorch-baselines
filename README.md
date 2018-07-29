@@ -1,6 +1,6 @@
 # pytorch-baselines
 
-Running the implemented agents on pong gives the following results:
+Running the implemented agents on Pong gives the following results:
 
 ![](pong-results.png)
 
